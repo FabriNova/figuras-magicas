@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Figuras Mágicas 3D</title>
+  <style>
+    body { margin: 0; background: black; overflow: hidden; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <!-- Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.148.0/build/three.min.js"></script>
+
+  <script>
+  let scene, camera, renderer, particles, halos, positions, targets = [];
+  let shapes = ["heart", "clover", "flower", "butterfly"];
+  let shapeIndex = 0;
+  let hue = 0;
+  let explode = false;
+  let mouseX = 0, mouseY = 0;
+
+  init();
+  animate();
+
+  function init() {
+    scene = new THREE.Scene();
+
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    camera.position.z = 250;
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const particleCount = 2500;
+    positions = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+      positions[i*3]   = (Math.random() - 0.5) * 400;
+      positions[i*3+1] = (Math.random() - 0.5) * 400;
+      positions[i*3+2] = (Math.random() - 0.5) * 400;
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+    const texture = new THREE.TextureLoader().load(
+      "https://cdn.jsdelivr.net/gh/mrdoob/three.js/examples/textures/sprites/disc.png"
+    );
+
+    // Partículas principales (más definidas)
+    const material = new THREE.PointsMaterial({
+      size: 3,   // antes 6
+      map: texture,
+      transparent: true,
+      opacity: 1, // más fuerte
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      color: new THREE.Color("hsl(0, 100%, 70%)")
+    });
+
+    particles = new THREE.Points(geometry, material);
+    scene.add(particles);
+
+    // Halos más suaves
+    const haloMaterial = new THREE.PointsMaterial({
+      size: 8,  // antes 12
+      map: texture,
+      transparent: true,
+      opacity: 0.05, // mucho más bajo
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      color: 0xffffff
+    });
+    halos = new THREE.Points(geometry.clone(), haloMaterial);
+    scene.add(halos);
+
+    // Primera forma
+    updateShape("heart");
+
+    // Cambiar forma cada 7 segundos con explosión
+    setInterval(() => {
+      explode = true;
+      setTimeout(() => {
+        shapeIndex = (shapeIndex + 1) % shapes.length;
+        updateShape(shapes[shapeIndex]);
+        explode = false;
+      }, 1000);
+    }, 7000);
+
+    // Resize
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Movimiento con mouse
+    window.addEventListener("mousemove", (event) => {
+      mouseX = (event.clientX / window.innerWidth - 0.5) * 2;
+      mouseY = (event.clientY / window.innerHeight - 0.5) * 2;
+    });
+  }
+
+  function updateShape(type) {
+    targets = [];
+    const steps = 2000;
+
+    if (type === "heart") {
+      for (let i = 0; i < steps; i++) {
+        let t = i / steps * Math.PI * 2;
+        let x = 16 * Math.pow(Math.sin(t), 3);
+        // ✅ corregido, sin el "-"
+        let y = (13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t));
+        let z = (Math.random()-0.5) * 30;
+        targets.push(new THREE.Vector3(x*8, y*8, z));
+      }
+    }
+
+    if (type === "clover") {
+      for (let i = 0; i < steps; i++) {
+        let t = i / steps * Math.PI * 2;
+        let r = 20 * Math.sin(2 * t);
+        let x = r * Math.cos(t);
+        let y = r * Math.sin(t);
+        let z = (Math.random()-0.5) * 50;
+        targets.push(new THREE.Vector3(x*8, y*8, z));
+      }
+    }
+
+    if (type === "flower") {
+      let petals = Math.floor(Math.random() * 7) + 4;
+      let scale = Math.random() * 15 + 20;
+      for (let i = 0; i < steps - 100; i++) {
+        let t = i / steps * Math.PI * 2;
+        let r = scale * Math.sin(petals * t);
+        let x = r * Math.cos(t);
+        let y = r * Math.sin(t);
+        let z = (Math.random()-0.5) * 40;
+        targets.push(new THREE.Vector3(x*8, y*8, z));
+      }
+      for (let i = 0; i < 100; i++) {
+        let x = (Math.random() - 0.5) * 10;
+        let y = (Math.random() - 0.5) * 10;
+        let z = (Math.random() - 0.5) * 10;
+        targets.push(new THREE.Vector3(x, y, z));
+      }
+    }
+
+    if (type === "butterfly") {
+      let scale = 20;
+      for (let i = 0; i < steps; i++) {
+        let t = i / steps * Math.PI * 24;
+        let r = Math.exp(Math.cos(t)) - 2*Math.cos(4*t) - Math.pow(Math.sin(t/12),5);
+        let x = Math.sin(t) * r * scale;
+        let y = Math.cos(t) * r * scale;
+        let z = Math.sin(Date.now() * 0.002 + t) * 15;
+        targets.push(new THREE.Vector3(x, y, z));
+      }
+    }
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+
+    let pos = particles.geometry.attributes.position.array;
+    let haloPos = halos.geometry.attributes.position.array;
+
+    for (let i = 0; i < pos.length/3; i++) {
+      if (targets.length > 0) {
+        let target = targets[i % targets.length];
+        if (explode) {
+          pos[i*3]   += (Math.random()-0.5) * 30;
+          pos[i*3+1] += (Math.random()-0.5) * 30;
+          pos[i*3+2] += (Math.random()-0.5) * 30;
+        } else {
+          pos[i*3]   += (target.x - pos[i*3]) * 0.03;
+          pos[i*3+1] += (target.y - pos[i*3+1]) * 0.03;
+          pos[i*3+2] += (target.z - pos[i*3+2]) * 0.03;
+        }
+        haloPos[i*3]   = pos[i*3];
+        haloPos[i*3+1] = pos[i*3+1];
+        haloPos[i*3+2] = pos[i*3+2];
+      }
+    }
+
+    particles.geometry.attributes.position.needsUpdate = true;
+    halos.geometry.attributes.position.needsUpdate = true;
+
+    // 🌈 Colores en transición
+    hue = (hue + 0.5) % 360; 
+    particles.material.color.setHSL(hue / 360, 1, 0.6);
+
+    // Movimiento con mouse
+    scene.rotation.y += (mouseX * 0.05 - scene.rotation.y) * 0.05;
+    scene.rotation.x += (mouseY * 0.05 - scene.rotation.x) * 0.05;
+
+    renderer.render(scene, camera);
+  }
+  </script>
+</body>
+</html>
